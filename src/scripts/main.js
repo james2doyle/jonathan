@@ -14,67 +14,122 @@ var center = canvas.display.ellipse({
 
 // Prototype objects that will be used to instantiate the others
 var satelliteProto = canvas.display.ellipse({
-  fill: "#eee"
+  origin: {
+    x: 0,
+    y: 0
+  },
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  fill: "#E19166",
+  zIndex: 4
 });
-var pathProto = canvas.display.ellipse({
-  stroke: "1px #999"
+var textProto = canvas.display.text({
+  opacity: 0,
+  origin: {
+    x: "center",
+    y: -18
+  },
+  font: "bold 12px sans-serif",
+  fill: "#000"
 });
+
+var lineProto = canvas.display.line({
+  start: {
+    x: 0,
+    y: 0
+  },
+  end: {
+    x: 0,
+    y: 0
+  },
+  zIndex: 1,
+  stroke: "1px #0aa",
+  cap: "round"
+});
+
+var tooltip = canvas.display.rectangle({
+  origin: {
+    x: 0,
+    y: 0
+  },
+  opacity: 0,
+  x: 0,
+  y: 0,
+  width: 200,
+  height: 100,
+  fill: "rgba(0,0,0,0.8)"
+});
+
+tooltip.dragAndDrop({ changeZindex: true });
 
 // Set up data
 var satellites = [];
 
 // Create seven satellites and paths. Definition is further down.
 createSatellite({
-  parent: center,
-  distance: (0 + 1) * canvas.width / 12,
+  parent: canvas,
+  title: "New Task",
+  distance: canvas.width / 12,
   radius: canvas.width / 100,
   speed: 1
+});
+
+canvas.addChild(tooltip);
+
+var tooltipText = canvas.display.text({
+  x: 18,
+  y: 18,
+  font: "bold 12px sans-serif",
+  fill: "#fff"
+});
+
+tooltip.addChild(tooltipText);
+
+tooltipText.bind("click", function() {
+  var title = prompt("New Task Title?");
+  if (title) {
+    satellites[tooltip.child_id].title = title;
+    satellites[tooltip.child_id].children[0].text = title;
+    tooltip.fadeOut("short", "ease-in-quad");
+    canvas.redraw();
+  }
 });
 
 function itemClick(event) {
   var evt = event || window.event;
   event.stopPropagation(); // dont allow any more events
-  console.log(this.id);
+  tooltip.x = this.x;
+  tooltip.y = this.y;
+  tooltip.child_id = this.id;
+  tooltipText.text = this.title;
+  canvas.redraw();
+  if(tooltip.opacity === 0) {
+    tooltip.fadeIn("short", "ease-in-quad");
+  } else {
+    tooltip.fadeOut("short", "ease-in-quad");
+  }
+  return false;
 }
 
 // Definition for a satellite and its corresponding path
 function createSatellite(options) {
-
-  // Create the path that the satellite will follow
-  // var path = pathProto.clone({
-  //   radius: options.distance,
-  //   x: options.x || 0, y: options.y || 0,
-  //   strokeColor: pathColors[options.depth - 1]
-  // });
-  // options.parent.addChild(path);
-
   // Create a new satellite
-  var angle = Math.random() * (360 - 0) + 0;
   var variant = Math.random() * (100 - 20) + 20;
-  var newX = (center.radius + variant) * Math.cos(angle);
-  var newY = (center.radius + variant) * Math.sin(angle);
+  var angle = Math.random() * (360 - 0) + 0;
+  var newX = (center.radius + 50) * Math.cos(angle);
+  var newY = (center.radius + 50) * Math.sin(angle);
   var satellite = satelliteProto.clone({
-    origin: {
-      x: 0,
-      y: 0
-    },
-    radius: options.radius,
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    fill: "#E19166",
-    zIndex: 4
+    title: options.title,
+    radius: options.radius
   });
-  satellite.bind("click", itemClick);
-  satellite.bind("mouseenter", function() {
-    canvas.mouse.cursor("move");
-  }).bind("mouseleave", function() {
-    canvas.mouse.cursor("default");
-  });
+  var line = lineProto.clone();
   var oldRadius = satellite.radius;
   var oldFill = satellite.fill;
   satellite.dragAndDrop({
     changeZindex: true,
     start: function() {
+      satellite.removeChild(line);
+      tooltip.fadeOut("short", "ease-in-quad");
       this.fill = "rgba(0,0,0,0.5)";
     },
     move: function() {
@@ -89,23 +144,40 @@ function createSatellite(options) {
       console.log('Move Complete');
     }
   });
-  var line = canvas.display.line({
-    start: {
-      x: 0,
-      y: 0
-    },
-    end: {
-      x: 0,
-      y: 0
-    },
-    zIndex: 1,
-    stroke: "1px #0aa",
-    cap: "round"
+
+  options.parent.addChild(satellite);
+
+  var text = textProto.clone({
+    y: newY * - 1,
+    x: newX * - 1,
+    text: options.title
   });
 
-  canvas.addChild(satellite);
+  satellite.addChild(text);
 
   satellite.addChild(line);
+
+  satellite.bind("click", itemClick);
+
+  function enter() {
+    canvas.mouse.cursor("move");
+    var self = this;
+    self.unbind('mouseenter');
+    text.fadeIn("short", "ease-in-quad", function() {
+      self.bind('mouseenter', enter);
+    });
+  }
+
+  function exit() {
+    canvas.mouse.cursor("default");
+    var self = this;
+    self.unbind('mouseleave');
+    text.fadeOut("short", "ease-in-quad", function() {
+      self.bind("mouseleave", exit);
+    });
+  }
+
+  satellite.bind("mouseenter", enter).bind("mouseleave", exit);
 
   line.animate({
     end: {
@@ -114,7 +186,7 @@ function createSatellite(options) {
     }
   }, {
     duration: "short",
-    easing: "ease-in-out-back",
+    easing: "ease-out",
     callback: function() {
       canvas.redraw();
     }
@@ -127,22 +199,25 @@ function createSatellite(options) {
     }
   }, {
     duration: "short",
-    easing: "ease-in-out-back",
+    easing: "ease-out-back",
     callback: function() {
       canvas.redraw();
     }
   });
 
+  satellite.id = satellites.length;
   satellites.push(satellite);
 }
 
 function addTask() {
   createSatellite({
-    parent: center,
+    parent: canvas,
+    title: "Task #" + (satellites.length + 1),
     distance: (0 + 1) * canvas.width / 12,
     radius: canvas.width / 100,
     speed: 1
   });
 }
 
+document.getElementById('addTask').addEventListener('click', addTask);
 document.getElementById('addTask').addEventListener('click', addTask);
